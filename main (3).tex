@@ -1,0 +1,631 @@
+% !TEX TS-program = pdflatex
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% ====== Theme (clean) ======
+\usetheme{Madrid}
+\usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+
+% ====== Packages ======
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{colortbl}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% ====== Optional: speaker notes (comment out if not needed) ======
+% \usepackage{pgfpages}
+% \setbeameroption{show notes on second screen=right}
+
+% ====== Metadata ======
+\title[DD -- Mixtape Chap. 9]{Difference-in-Differences (Chapitre 9)\\ \small \emph{Causal Inference: The Mixtape} (Scott Cunningham)}
+\author{Marwane, Zakaria, Lucas}
+\institute{Université Paris Nanterre}
+\date{\ 24 février 2026}
+
+% ====== Helpers ======
+\newcommand{\ATT}{\mathrm{ATT}}
+\newcommand{\E}{\mathbb{E}}
+% --- FIX BLOCK COLORS (put in preamble) ---
+\setbeamercolor{block title}{fg=white,bg=blue!70!black}
+\setbeamercolor{block body}{fg=black,bg=blue!5}
+
+% Optional: make blocks simpler (less bugs)
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+\begin{document}
+
+% ------------------------------------------------------------
+\begin{frame}
+  \titlepage
+  % \note{Annonce : 45 minutes. Plan : intuition, estimation, inférence, event study, placebos/DDD, TWFE et Bacon, conclusion.}
+\end{frame}
+
+% ------------------------------------------------------------
+\begin{frame}{Plan}
+\begin{enumerate}
+  \item (9.1) Motivation historique : \textbf{John Snow et le choléra}
+  \item (9.2) \textbf{Estimation} : table 2x2, formule DD, décomposition en ATT + biais
+  \item (9.3) \textbf{Inférence} : erreurs standards, clustering, bootstrap, agrégation
+  \item (9.4) \textbf{Event studies} : preuves indirectes de tendances parallèles
+  \item (9.5) \textbf{Placebos} et \textbf{Triple Differences (DDD)}
+  \item (9.6) \textbf{TWFE} avec timing différentiel + \textbf{Bacon decomposition}
+  \item (9.7) Conclusion : bonnes pratiques et limites
+\end{enumerate}
+% \note{Annonce : ~20 slides, ~2 minutes/slide.}
+\end{frame}
+
+% ==========================
+% 9.1 John Snow
+% ==========================
+\section{9.1 John Snow : motivation}
+
+\begin{frame}{9.1 John Snow (1854) : une « expérience naturelle »}
+\begin{itemize}
+  \item Contexte : épidémies de choléra à Londres.
+  \item Hypothèse : transmission par \textbf{l'eau} (pas par l'air).
+  \item Traitement : accès à une eau plus propre (prise d'eau déplacée en amont).
+  \item Groupes : compagnies d'eau (Lambeth vs Southwark \& Vauxhall).
+  \item Idée DD : comparer \textbf{avant/après} et \textbf{traité/contrôle}.
+\end{itemize}
+% \note{Insister sur “haphazardly” / variation quasi-aléatoire.}
+\end{frame}
+
+\begin{frame}{9.1 John Snow (1854) : une « expérience naturelle »}
+
+\centering
+\includegraphics[height=0.75\textheight, keepaspectratio]{Snow.jpg}
+
+\vspace{0.3cm}
+
+\small
+Carte originale montrant la concentration des décès autour de la pompe de Broad Street (1854).
+
+\end{frame}
+
+\begin{frame}{9.1.1 Table XII : logique DD sur le choléra}
+\begin{columns}[T,onlytextwidth]
+\column{0.52\textwidth}
+\begin{block}{Tableau (exemple)}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Compagnie} & \textbf{1849} & \textbf{1854} \\
+\midrule
+Southwark \& Vauxhall & 135 & 147 \\
+Lambeth & 85 & 19 \\
+\bottomrule
+\end{tabular}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{block}{Calcul DD (intuition)}
+\[
+DD=(19-85)-(147-135)
+\]
+\[
+DD=-66-12=-78
+\]
+\small $\Rightarrow$ environ \textbf{78 décès de choléra en moins} (par 10\,000 ménages) attribuables à l'eau propre.
+\end{block}
+\end{columns}
+% \note{Faire parler le tableau : “l'écart se creuse après”.}
+\end{frame}
+
+% ==========================
+% 9.2 Estimation
+% ==========================
+\section{9.2 Estimation}
+
+\begin{frame}{9.2 Estimation : pourquoi pas une comparaison naïve ?}
+\begin{itemize}
+  \item Comparaison \textbf{post} traité vs contrôle : biais de sélection (différences fixes).
+  \item Comparaison \textbf{avant/après} traité : confond traitement et \textbf{tendance commune} (chocs temporels).
+  \item DD combine les deux pour éliminer :
+  \begin{itemize}
+    \item effets fixes (différences permanentes),
+    \item tendances communes (chocs macro).
+  \end{itemize}
+\end{itemize}
+% \note{Expliquer clairement les deux biais.}
+\end{frame}
+
+\begin{frame}{9.2.1 La table 2x2 (définition)}
+\begin{block}{Notation}
+\begin{itemize}
+  \item Groupe traité : $T$ ; contrôle : $C$
+  \item Période pré : $pre$ ; post : $post$
+\end{itemize}
+\end{block}
+
+\begin{block}{Estimateur DD}
+\[
+\widehat{DD} =
+(\overline{Y}_{T,post}-\overline{Y}_{T,pre})
+-(\overline{Y}_{C,post}-\overline{Y}_{C,pre})
+\]
+\end{block}
+
+% \note{Citer : “difference of differences” = double-différence.}
+\end{frame}
+
+\begin{frame}{Du tableau 2x2 à la régression}
+\begin{block}{Modèle DiD standard}
+\[
+Y_{it} = \alpha + \beta \text{Treat}_i 
++ \gamma \text{Post}_t 
++ \delta (\text{Treat}_i \times \text{Post}_t) 
++ \varepsilon_{it}
+\]
+\end{block}
+
+\begin{itemize}
+  \item $\delta$ = estimateur DiD
+  \item $\beta$ = différence moyenne entre groupes
+  \item $\gamma$ = choc commun temporel
+\end{itemize}
+
+\begin{block}{Interprétation}
+La régression reproduit exactement la double différence 2x2.
+\end{block}
+\end{frame}
+
+\begin{frame}{Intuition graphique du Difference-in-Differences}
+
+\centering
+\includegraphics[height=0.75\textheight, keepaspectratio]{C1.PNG}
+
+\vspace{0.1cm}
+
+\small
+L’effet DiD ($\delta$) correspond à l’écart vertical entre le groupe traité observé 
+et son contrefactuel en période post, sous l’hypothèse de tendances parallèles.
+
+\end{frame}
+
+
+\begin{frame}{9.2.2 Ce que DD identifie : décomposition}
+\begin{block}{Décomposition (2x2)}
+\[
+\widehat{DD} = \ATT \;+\; \underbrace{\Big(\E[Y^0_{T,post}-Y^0_{T,pre}] - \E[Y^0_{C,post}-Y^0_{C,pre}]\Big)}_{\text{biais de non-tendances parallèles}}
+\]
+\end{block}
+\begin{itemize}
+  \item $\ATT=\E[Y^1_{T,post}-Y^0_{T,post}]$ (effet moyen sur traités).
+  \item Condition clé : \textbf{tendances parallèles} $\Rightarrow$ biais = 0.
+  \item Hypothèse des tendances parallèles : On suppose que sans traitement,
+  les deux groupes auraient évolué de la même manière. Hypothèse non testables directement.
+\end{itemize}
+% \note{Insister : l’objet contre-factuel Y^0_{T,post} est non observable.}
+\end{frame}
+
+
+
+\begin{frame}{Le problème fondamental}
+\begin{block}{Ce qu'on ne voit pas}
+\[
+Y^0_{T,post}
+\]
+\end{block}
+
+\begin{itemize}
+  \item On observe $Y^1_{T,post}$ (avec traitement).
+  \item On ne peut jamais observer
+  ce qu'aurait été le groupe traité sans traitement.
+  \item DD reconstruit ce contrefactuel à partir du contrôle.
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{9.2.3 Exemple : salaire minimum (Card \& Krueger)}
+\begin{itemize}
+  \item Traitement : hausse du salaire minimum (NJ) ; contrôle : PA.
+  \item Outcome : emploi (fast-food).
+  \item Résultat connu : DD peut donner un effet \textbf{non négatif}.
+  \item Point pédagogique : DD est crédible si tendances parallèles + design sérieux (collecte de données).
+\end{itemize}
+
+\begin{block}{Emplacement figure (distribution des salaires / ``first stage'')}
+\begin{itemize}
+  \item Mettre une figure de distribution des salaires (avant/après, NJ vs PA) si dispo.
+\end{itemize}
+\end{block}
+% \note{Dire : une bonne figure “first stage” rend l’étude persuasive.}
+\end{frame}
+
+% ==========================
+% 9.3 Inference
+% ==========================
+\section{9.3 Inference}
+
+\begin{frame}{9.3 Inférence : le problème des SE en DiD}
+
+\begin{block}{Problème}
+Dans les données panel, les erreurs sont corrélées dans le temps.
+\end{block}
+
+\begin{itemize}
+\item On observe les mêmes unités sur plusieurs périodes.
+\item Les erreurs $\varepsilon_{it}$ ne sont pas indépendantes.
+\item Les erreurs standards OLS sont alors sous-estimées.
+\end{itemize}
+
+\begin{block}{Conséquence}
+Risque élevé de faux positifs (sur-rejet).
+\end{block}
+
+\end{frame}
+
+\begin{frame}{9.3.1 Amorçage par blocs (Block Bootstrap)}
+
+\begin{block}{Idée}
+Rééchantillonner les groupes entiers (ex : États) avec remise.
+\end{block}
+
+\begin{itemize}
+\item L'unité d'indépendance est le groupe, pas l'observation individuelle.
+\item On tire des blocs complets (toutes les années d'un État).
+\item On re-estime le DiD à chaque tirage.
+\end{itemize}
+
+\begin{block}{Avantage}
+Permet de corriger la corrélation intra-groupe.
+\end{block}
+
+\end{frame}
+
+\begin{frame}{9.3.2 Agrégation}
+
+\begin{block}{Idée}
+Résumer les données en une période moyenne pré
+et une période moyenne post.
+\end{block}
+
+\[
+\bar{Y}_{i,pre} = \frac{1}{T_{pre}} \sum_{t \in pre} Y_{it}
+\quad
+\bar{Y}_{i,post} = \frac{1}{T_{post}} \sum_{t \in post} Y_{it}
+\]
+
+\begin{itemize}
+\item On réduit la dimension temporelle.
+\item On limite le problème de corrélation sérielle.
+\end{itemize}
+
+\begin{block}{Limite}
+Perte d'information sur la dynamique temporelle.
+\end{block}
+
+\end{frame}
+
+\begin{frame}{9.3.3 Clustering}
+
+\begin{block}{Idée}
+Autoriser une corrélation arbitraire des erreurs
+à l'intérieur d'un même groupe.
+\end{block}
+
+\begin{itemize}
+\item On clusterise au niveau où le traitement varie.
+\item Exemple : si le traitement varie par État,
+on clusterise au niveau État.
+\item Corrige la variance estimée.
+\end{itemize}
+
+\begin{block}{Règle pratique}
+Toujours cluster au niveau du traitement.
+\end{block}
+
+\end{frame}
+
+% ==========================
+% 9.4 Event Study / Leads
+% ==========================
+\section{9.4 Event study et preuves de tendances parallèles}
+
+\begin{frame}{9.4 Pourquoi une event study ?}
+\begin{itemize}
+  \item Tester indirectement la plausibilité des tendances parallèles.
+  \item Voir la \textbf{dynamique} des effets après traitement.
+  \item Détecter \textbf{anticipation} / \textbf{pré-trends} (leads significatifs).
+\end{itemize}
+\end{frame}
+
+\begin{frame}{9.4 Modèle leads \& lags}
+\begin{block}{Régression event study}
+\[
+Y_{ist} = \gamma_s + \lambda_t 
++ \sum_{\tau = -q}^{-1} \gamma_{\tau} D_{st}
++ \sum_{\tau = 0}^{m} \delta_{\tau} D_{st}
++ x_{ist}
++ \varepsilon_{ist}
+\]
+\end{block}
+
+\begin{itemize}
+    \item $\gamma_s$ : effets fixes individuels (ex : État)
+    \item $\lambda_t$ : effets fixes temporels
+    \item $\sum_{\tau = -q}^{-1} \gamma_{\tau} D_{st}$ : leads (périodes avant traitement)
+    \item $\sum_{\tau = 0}^{m} \delta_{\tau} D_{st}$ : lags (périodes après traitement)
+    \item $x_{st}\beta$ : variables de contrôle
+    \item $\varepsilon_{st}$ : terme d’erreur
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{9.4.3 Exemple : ACA Medicaid et mortalité (intuition)}
+\begin{itemize}
+  \item Traitement : expansion Medicaid (certains États) après ACA.
+  \item ``First stage'' : éligibilité $\uparrow$, couverture $\uparrow$, non-assurance $\downarrow$.
+  \item Outcome : mortalité annuelle $\downarrow$ après traitement.
+\end{itemize}
+
+% \note{Insister sur la rhétorique empirique : first stage + outcome.}
+\end{frame}
+
+\begin{frame}{Event Study : dynamique des effets}
+
+\centering
+\includegraphics[height=0.9\textheight, keepaspectratio]{94.png}
+
+\vspace{0.2cm}
+
+
+\end{frame}
+
+\begin{frame}{Event Study : dynamique des effets}
+
+\centering
+\includegraphics[height=0.9\textheight, keepaspectratio]{C3.png}
+
+\vspace{0.2cm}
+
+
+
+\end{frame}
+
+
+
+
+% ==========================
+% 9.5 Placebos + DDD
+% ==========================
+\section{9.5 Placebos et Triple Differences}
+
+\begin{frame}{9.5 Placebos : logique de falsification}
+\begin{itemize}
+   \begin{itemize}
+  \item Un placebo teste un effet là où la théorie prédit \textbf{zéro}.
+  \item Si l'effet estimé est proche de \textbf{0}, cela renforce la crédibilité du design.
+  \item Si l'effet est significativement différent de 0, il y a un problème (biais potentiel).
+\end{itemize}
+  \item Exemple : salaire minimum ne devrait pas affecter les \textbf{travailleurs haut salaire} (placebo).
+  \item Les placebos renforcent la crédibilité face aux chocs non observés.
+\end{itemize}
+% \note{Faire une phrase : “un bon papier anticipe les critiques”.}
+\end{frame}
+
+\begin{frame}{9.5.1 Triple Differences (DDD) : quand DD ne suffit pas}
+\begin{block}{Problème}
+\begin{itemize}
+  \item Si choc \textbf{spécifique État×Temps} (ex: NJ a un choc économique propre), DD peut être biaisé.
+\end{itemize}
+\end{block}
+
+\begin{block}{Solution : DDD}
+\begin{itemize}
+  \item Ajouter une 3e dimension (ex: \textbf{low-wage} vs \textbf{high-wage}).
+  \item DDD = (DD low-wage) $-$ (DD high-wage).
+\end{itemize}
+\end{block}
+% \note{Dire : DDD retire des confondants qui affectent les deux groupes dans l’État.}
+\end{frame}
+
+
+\begin{frame}{Formule Triple Differences}
+\begin{block}{DDD}
+\[
+DDD =
+[(Y_{T,post}^{low}-Y_{T,pre}^{low})
+-
+(Y_{C,post}^{low}-Y_{C,pre}^{low})]
+-
+[(Y_{T,post}^{high}-Y_{T,pre}^{high})
+-
+(Y_{C,post}^{high}-Y_{C,pre}^{high})]
+\]
+\end{block}
+
+\begin{itemize}
+  \item Retire les chocs État×Temps
+  affectant tous les travailleurs.
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Exemple DDD : Prestations de maternité obligatoires}
+
+\begin{block}{Contexte}
+Certains États imposent des prestations de maternité.
+\end{block}
+
+\begin{itemize}
+\item Dimension 1 : États (Réforme vs Non-réforme)
+\item Dimension 2 : Temps (Avant vs Après)
+\item Dimension 3 : Groupe (Femmes 20-40 ans vs Femmes 45-60 ans)
+\end{itemize}
+
+\begin{block}{Logique}
+Les femmes plus âgées servent de groupe placebo.
+\end{block}
+
+\[
+DDD = (DD_{jeunes}) - (DD_{plus\ âgées})
+\]
+
+\end{frame}
+
+
+
+\begin{frame}{Exemple DDD : Salaire minimum}
+
+\begin{block}{Contexte}
+Hausse du salaire minimum au New Jersey (NJ) comparé à la Pennsylvanie (PA).
+\end{block}
+
+\begin{itemize}
+\item Dimension 1 : État (NJ vs PA)
+\item Dimension 2 : Temps (Avant vs Après)
+\item Dimension 3 : Groupe salarial (Bas salaire vs Haut salaire)
+\end{itemize}
+
+\begin{block}{Logique DDD}
+\[
+DDD = (DD_{low\ wage}) - (DD_{high\ wage})
+\]
+\end{block}
+
+\begin{itemize}
+\item Les travailleurs haut salaire servent de groupe placebo.
+\item On retire les chocs spécifiques État $\times$ Temps.
+\end{itemize}
+
+\end{frame}
+
+% ==========================
+% 9.6 TWFE with differential timing
+% ==========================
+\section{9.6 TWFE et timing différentiel}
+
+\begin{frame}{9.6 TWFE }
+
+\begin{block}{Contexte}
+Les unités adoptent le traitement à des dates différentes.
+\end{block}
+
+\[
+Y_{it} = \alpha_i + \lambda_t + \delta D_{it} + \varepsilon_{it}
+\]
+
+\begin{itemize}
+\item Modèle standard avec effets fixes.
+\item Problème : toutes les comparaisons ne sont pas équivalentes.
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Pourquoi cela pose problème ?}
+
+\begin{itemize}
+\item Les traités tôt deviennent les contrôles des traités tard.
+\item L’estimateur TWFE mélange plusieurs comparaisons 2×2.
+\end{itemize}
+
+\begin{block}{Résultat clé (Goodman-Bacon)}
+$\hat{\delta}_{TWFE}$ = moyenne pondérée de plusieurs DiD 2×2.
+\end{block}
+
+\end{frame}
+
+
+\begin{frame}{Décomposition de Goodman-Bacon}
+
+\centering
+\includegraphics[height=0.78\textheight, keepaspectratio]{C2.PNG}
+
+\small
+Comparaisons entre : traités vs jamais traités, traités tôt vs tard.
+\end{frame}
+
+\begin{frame}{Deux risques majeurs}
+
+\begin{enumerate}
+\item Hétérogénéité des effets dans le temps.
+\item Pondérations négatives possibles.
+\end{enumerate}
+
+\begin{block}{Conclusion}
+TWFE peut donner une estimation biaisée si les effets ne sont pas constants.
+\end{block}
+
+\end{frame}
+
+
+
+
+\begin{frame}{9.6.6 Application : Castle doctrine et homicides (exemple)}
+\begin{itemize}
+  \item Exemple de politique adoptée à des dates différentes selon les États.
+  \item Utilité : illustrer event study + TWFE + décomposition.
+\end{itemize}
+
+\begin{block}{Emplacement figures}
+\begin{itemize}
+  \item Event study (effet dynamique sur homicides).
+  \item Plot Bacon weights (si vous le faites en R).
+\end{itemize}
+\end{block}
+% \note{Même si vous ne reproduisez pas tout, montrer l’idée.}
+\end{frame}
+
+
+
+% ==========================
+% 9.7 Conclusion
+% ==========================
+\section{9.7 Conclusion}
+
+\begin{frame}{9.7 Conclusion : bonnes pratiques (checklist)}
+\begin{enumerate}
+  \item Design crédible : traitement quasi-exogène, groupe contrôle pertinent.
+  \item Vérifier la plausibilité des tendances parallèles :
+  \begin{itemize}
+    \item event study (leads proches de 0),
+    \item contrôle des covariables et équilibre pré-traitement.
+  \end{itemize}
+  \item Inférence correcte : \textbf{cluster} (et attention au faible nombre de clusters).
+  \item Robustesse : \textbf{placebos}, \textbf{DDD}.
+  \item En timing différentiel : méfiance TWFE, analyser avec décompositions / méthodes modernes.
+\end{enumerate}
+% \note{Conclure : “DD est puissant mais exigeant”.}
+\end{frame}
+
+\begin{frame}{Message final}
+\begin{block}{À retenir}
+\begin{itemize}
+  \item DD identifie un effet causal si (et seulement si) l'hypothèse de \textbf{tendances parallèles} est crédible.
+  \item Les diagnostics (event study, placebos) sont essentiels.
+  \item Avec adoption échelonnée, TWFE peut être biaisé : il faut comprendre ce qui est réellement comparé.
+\end{itemize}
+\end{block}
+\end{frame}
+
+% ------------------------------------------------------------
+\begin{frame}{Références (à compléter)}
+\small
+\begin{itemize}
+  \item Cunningham, S. (2021). \emph{Causal Inference: The Mixtape}. Yale University Press / mixtape.scunning.com.
+  \item Snow, J. (1855). \emph{On the Mode of Communication of Cholera}.
+  \item Card, D. \& Krueger, A. (1994). Minimum wages and employment.
+  \item Bertrand, M., Duflo, E., Mullainathan, S. (2004). How much should we trust DD?
+  \item Goodman-Bacon, A. (2019). Bacon decomposition.
+  \item Cheng, C. \& Hoekstra, M. (2013). Castle doctrine and homicides.
+  \item Miller, S. et al. (2019). ACA Medicaid expansion and mortality.
+\end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------
+\begin{frame}{Questions}
+\centering
+\Large Merci !\\[6pt]
+\large 
+\end{frame}
+
+\end{document}
